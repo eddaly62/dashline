@@ -30,7 +30,7 @@
 
 #define PIX_PER_DASH    10
 
-void dline(bool dash, float x0, float y0, float x1, float y1) {
+void dline(float x0, float y0, float x1, float y1) {
     float l;
     float m;
     float dx, dy;
@@ -41,23 +41,26 @@ void dline(bool dash, float x0, float y0, float x1, float y1) {
     int i;
     float pps;
 
+    // determine length of line
     l = sqrtf(powf((x1 - x0), (float)2) + powf((y1 - y0), (float)2));
 
     printf("length = %f pixels\n", l);
 
+    // determine length of dash
     nl = ((int)(l / PIX_PER_DASH));
     if (nl % 2 == 0) {
-        nl++; // make it an odd number
+        // make it an odd number,
+        // so there is a solid dash at the start and end of the line
+        nl++;
     }
     pps = l / (float)nl;
-
-    dy = y1 - y0;
-    dx = x1 - x0;
 
     printf("number of dashes = %d\n", nl);
     printf("length per dash = %f\n", pps);
     printf("m = %f\n", m);
 
+    dy = y1 - y0;
+    dx = x1 - x0;
     xs = x0;
     ys = y0;
     for (i = 0; i < nl; i++) {
@@ -85,22 +88,10 @@ void dline(bool dash, float x0, float y0, float x1, float y1) {
             }
         }
         else {
+            // knowing the slope and dash length, calculate the ending x and y points
             m = (y1 -y0) / (x1 - x0);
-
             dxn = (pps / sqrt(1 + (m * m)));
             dyn = m * dxn;
-
-            if (m > 0) {
-                // slope is positive
-                xe = xs + dxn;
-                ye = ys + dyn;
-
-            }
-            else {
-                // slope is negative
-                xe = xs - dxn;
-                ye = ys - dyn;
-            }
 
             if (x1 > x0) {
                 xe = xs + dxn;
@@ -115,20 +106,17 @@ void dline(bool dash, float x0, float y0, float x1, float y1) {
             else {
                 ye = ys - dyn;
             }
+        }
 
-        }
-        if (dash == true) {
-            if (i % 2 ==  0) {
-                al_draw_line(xs, ys, xe, ye, C585NM, 1);
-            }
-            else {
-                al_draw_line(xs, ys, xe, ye, BLACK, 1);
-            }
-        }
-        else {
+        // draw a dash
+        if (i % 2 ==  0) {
             al_draw_line(xs, ys, xe, ye, C585NM, 1);
         }
+        else {
+            al_draw_line(xs, ys, xe, ye, BLACK, 1);
+        }
 
+        // initialize for next dash calulation
         xs = xe;
         ys = ye;
 
@@ -136,7 +124,29 @@ void dline(bool dash, float x0, float y0, float x1, float y1) {
 
 }
 
+void line(bool dash, float x0, float y0, float x1, float y1) {
 
+    if (dash == true) {
+        dline(x0, y0, x1, y1);
+    }
+    else {
+        al_draw_line(x0, y0, x1, y1, C585NM, 1);
+    }
+}
+
+void rect(bool dash, float x0, float y0, float x1, float y1) {
+    float w, h;
+    w = x1 - x0;
+    h = y1 - y0;
+    line(dash, x0, y0, x0 + w, y0);
+    line(dash, x0 + w, y0, x0 + w, y1);
+    line(dash, x0, y0, x0, y1);
+    line(dash, x0, y0 + h, x1, y1);
+}
+
+void rect_filled(float x0, float y0, float x1, float y1, ALLEGRO_COLOR fg) {
+    al_draw_filled_rectangle(x0, y0, x1, y1, fg);
+}
 
 int main()  {
 
@@ -171,11 +181,16 @@ int main()  {
     al_clear_to_color(BLACK);
 
     // draw a horizontal line
-    dline(true, 10, 10, 200, 10);
+    line(true, 10, 10, 200, 10);
     // draw a vertical line
-    dline(true, 200, 10, 200, 300);
+    line(true, 200, 10, 200, 300);
     // draw diagnol
-    dline(true, 200, 300, 10, 10);
+    line(true, 200, 300, 10, 10);
+    line(false, 200, 300, 400, 300);
+
+    // draw a dashed rectangle
+    rect(true, 10, 400, 400, 600);
+
 
 
     // update display
