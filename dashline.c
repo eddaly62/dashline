@@ -28,7 +28,10 @@
 #define HOME_X      0
 #define HOME_Y      0
 
+#define RAD_PER_CIRCLE  ((float)2 * M_PI)
+#define DASH_PER_CIRCLE 40
 #define PIX_PER_DASH    10
+#define LINE_WIDTH      2
 
 void dline(float x0, float y0, float x1, float y1) {
     float l;
@@ -110,10 +113,10 @@ void dline(float x0, float y0, float x1, float y1) {
 
         // draw a dash
         if (i % 2 ==  0) {
-            al_draw_line(xs, ys, xe, ye, C585NM, 1);
+            al_draw_line(xs, ys, xe, ye, C585NM, LINE_WIDTH);
         }
         else {
-            al_draw_line(xs, ys, xe, ye, BLACK, 1);
+            al_draw_line(xs, ys, xe, ye, BLACK, LINE_WIDTH);
         }
 
         // initialize for next dash calulation
@@ -127,13 +130,16 @@ void dline(float x0, float y0, float x1, float y1) {
 void line(bool dash, float x0, float y0, float x1, float y1) {
 
     if (dash == true) {
+        // draw a dashed line
         dline(x0, y0, x1, y1);
     }
     else {
-        al_draw_line(x0, y0, x1, y1, C585NM, 1);
+        // draw a solid line
+        al_draw_line(x0, y0, x1, y1, C585NM, LINE_WIDTH);
     }
 }
 
+// draw a rectangle, solid or dashed outline
 void rect(bool dash, float x0, float y0, float x1, float y1) {
     float w, h;
     w = x1 - x0;
@@ -144,9 +150,43 @@ void rect(bool dash, float x0, float y0, float x1, float y1) {
     line(dash, x0, y0 + h, x1, y1);
 }
 
+// draw a rectangle, filled with a solid color
 void rect_filled(float x0, float y0, float x1, float y1, ALLEGRO_COLOR fg) {
     al_draw_filled_rectangle(x0, y0, x1, y1, fg);
 }
+
+void dcircle(float x, float y, float r, ALLEGRO_COLOR fg, ALLEGRO_COLOR bg, float t) {
+
+    int i;
+    float ds, dd;
+
+    dd = (float)RAD_PER_CIRCLE / (float)DASH_PER_CIRCLE;
+
+    for ( i = 0; i < DASH_PER_CIRCLE; i++) {
+        ds = i * dd;
+        if (i %2 != 0) {
+            al_draw_arc(x, y, r, ds, dd, fg, t);
+        }
+        else {
+            al_draw_arc(x, y, r, ds, dd, bg, t);
+        }
+    }
+}
+
+void circle(bool dash, float x, float y, float r, ALLEGRO_COLOR fg, ALLEGRO_COLOR bg, float t) {
+
+    if (dash == true) {
+        dcircle(x, y, r, fg, bg, t);
+
+    }
+    else {
+        al_draw_circle(x, y, r, fg, t);
+
+    }
+}
+
+
+
 
 int main()  {
 
@@ -187,9 +227,16 @@ int main()  {
     // draw diagnol
     line(true, 200, 300, 10, 10);
     line(false, 200, 300, 400, 300);
+    line(false, 200, 300, 400, 10);
 
     // draw a dashed rectangle
-    rect(true, 10, 400, 400, 600);
+    rect(true, 10, 400, 400, 500);
+    // draw a filled rectangle
+    rect_filled(10, 550, 400, 600, C585NM);
+
+    // draw dashed circle
+    circle(true, 60, 300, 50, C585NM, BLACK, LINE_WIDTH);
+
 
 
 
