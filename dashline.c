@@ -2,6 +2,7 @@
 
 #include <sys/stat.h>
 #include <sys/types.h>
+#include <sys/mman.h>
 #include <fcntl.h>
 #include <string.h>
 #include <stdio.h>
@@ -155,6 +156,7 @@ void rect_filled(float x0, float y0, float x1, float y1, ALLEGRO_COLOR fg) {
     al_draw_filled_rectangle(x0, y0, x1, y1, fg);
 }
 
+// draw a dashed circle
 void dcircle(float x, float y, float r, ALLEGRO_COLOR fg, ALLEGRO_COLOR bg, float t) {
 
     int i;
@@ -173,6 +175,7 @@ void dcircle(float x, float y, float r, ALLEGRO_COLOR fg, ALLEGRO_COLOR bg, floa
     }
 }
 
+// draw a dashed or solid circle
 void circle(bool dash, float x, float y, float r, ALLEGRO_COLOR fg, ALLEGRO_COLOR bg, float t) {
 
     if (dash == true) {
@@ -185,7 +188,76 @@ void circle(bool dash, float x, float y, float r, ALLEGRO_COLOR fg, ALLEGRO_COLO
     }
 }
 
+// get raster data
+ uint8_t * get_raster_file(char *filename, struct stat *sb) {
 
+    int fd;
+    int r;
+    uint8_t *file_in_mem;
+
+    fd = open(filename, O_RDONLY, S_IRUSR | S_IWUSR);
+    r = fstat(fd, sb);
+    assert(r != -1);
+
+    file_in_mem = mmap(NULL, sb->st_size, PROT_READ, MAP_PRIVATE, fd, 0);
+
+    return (uint8_t *)file_in_mem;
+}
+
+
+const uint8_t rmask[8] = {
+    0b10000000,
+    0b01000000,
+    0b00100000,
+    0b00010000,
+    0b00001000,
+    0b00000100,
+    0b00000010,
+    0b00000001,
+};
+
+#define RASTER_LINE_SIZE 512
+
+// draw raster pattern
+void draw_raster(float x, float y, uint8_t *data, uint32_t size, ALLEGRO_COLOR fg, ALLEGRO_COLOR bg) {
+
+    uint32_t i;
+    uint8_t m;
+    uint8_t *ptr;
+    uint8_t pattern;
+    float nx, ny;
+    float posx, posy;
+
+    ptr = data;
+    nx = 0;
+    ny = 0;
+    posx = x;
+    posy = y;
+
+    for (i = 0; i < size; i++) {
+
+        pattern = *ptr;
+
+        for (m = 0; m < 8; m++) {
+
+            if (pattern & rmask[m]) {
+                al_draw_pixel(posx, posy, fg);
+            }
+            else {
+                al_draw_pixel(posx, posy, bg);
+            }
+
+            nx++;
+            posx = nx + x;
+            if (posx >= RASTER_LINE_SIZE) {
+                nx = 0;
+                ny++;
+                posy = ny + y;
+            }
+        }
+        ptr++;
+    }
+}
 
 
 int main()  {
@@ -237,8 +309,12 @@ int main()  {
     // draw dashed circle
     circle(true, 60, 300, 50, C585NM, BLACK, LINE_WIDTH);
 
-
-
+    // draw raster pattern
+    #define RASTER_FILE "dap_raster_test.bmp"
+    uint8_t *file_in_mem;
+    struct stat sb;
+    file_in_mem = get_raster_file(RASTER_FILE, &sb);
+    draw_raster(0, 610, file_in_mem+0, sb.st_size, C585NM, BLACK);
 
     // update display
     al_flip_display();
