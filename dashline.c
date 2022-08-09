@@ -34,7 +34,7 @@
 #define PIX_PER_DASH    10
 #define LINE_WIDTH      2
 
-void dline(float x0, float y0, float x1, float y1) {
+void dline(float x0, float y0, float x1, float y1, ALLEGRO_COLOR fg, ALLEGRO_COLOR bg) {
     float l;
     float m;
     float dx, dy;
@@ -114,13 +114,13 @@ void dline(float x0, float y0, float x1, float y1) {
 
         // draw a dash
         if (i % 2 ==  0) {
-            al_draw_line(xs, ys, xe, ye, C585NM, LINE_WIDTH);
+            al_draw_line(xs, ys, xe, ye, fg, LINE_WIDTH);
         }
         else {
-            al_draw_line(xs, ys, xe, ye, BLACK, LINE_WIDTH);
+            al_draw_line(xs, ys, xe, ye, bg, LINE_WIDTH);
         }
 
-        // initialize for next dash calulation
+        // initialize for next dash calculation
         xs = xe;
         ys = ye;
 
@@ -128,32 +128,37 @@ void dline(float x0, float y0, float x1, float y1) {
 
 }
 
-void line(bool dash, float x0, float y0, float x1, float y1) {
+void line(bool dash, float x0, float y0, float x1, float y1, ALLEGRO_COLOR fg, ALLEGRO_COLOR bg) {
 
     if (dash == true) {
         // draw a dashed line
-        dline(x0, y0, x1, y1);
+        dline(x0, y0, x1, y1, fg, bg);
     }
     else {
         // draw a solid line
-        al_draw_line(x0, y0, x1, y1, C585NM, LINE_WIDTH);
+        al_draw_line(x0, y0, x1, y1, fg, LINE_WIDTH);
     }
 }
 
 // draw a rectangle, solid or dashed outline
-void rect(bool dash, float x0, float y0, float x1, float y1) {
+void rect(bool dash, float x0, float y0, float x1, float y1, ALLEGRO_COLOR fg, ALLEGRO_COLOR bg) {
     float w, h;
     w = x1 - x0;
     h = y1 - y0;
-    line(dash, x0, y0, x0 + w, y0);
-    line(dash, x0 + w, y0, x0 + w, y1);
-    line(dash, x0, y0, x0, y1);
-    line(dash, x0, y0 + h, x1, y1);
+    line(dash, x0, y0, x0 + w, y0, fg, bg);
+    line(dash, x0 + w, y0, x0 + w, y1, fg, bg);
+    line(dash, x0, y0, x0, y1, fg, bg);
+    line(dash, x0, y0 + h, x1, y1, fg, bg);
 }
 
 // draw a rectangle, filled with a solid color
-void rect_filled(float x0, float y0, float x1, float y1, ALLEGRO_COLOR fg) {
-    al_draw_filled_rectangle(x0, y0, x1, y1, fg);
+void rect_filled(float x0, float y0, float x1, float y1, uint16_t t, ALLEGRO_COLOR fg, ALLEGRO_COLOR bg) {
+    if (t == UINT16_MAX) {
+        al_draw_filled_rectangle(x0, y0, x1, y1, fg);
+    }
+    else {
+            // todo
+    }
 }
 
 // draw a dashed circle
@@ -205,7 +210,7 @@ void circle(bool dash, float x, float y, float r, ALLEGRO_COLOR fg, ALLEGRO_COLO
 }
 
 
-const uint8_t rmask[8] = {
+const uint8_t raster_mask[8] = {
     0b10000000,
     0b01000000,
     0b00100000,
@@ -216,15 +221,12 @@ const uint8_t rmask[8] = {
     0b00000001,
 };
 
-#define RASTER_LINE_SIZE 512
-
 // draw raster pattern
-void draw_raster(float x, float y, uint8_t *data, uint32_t size, ALLEGRO_COLOR fg, ALLEGRO_COLOR bg) {
+void draw_raster(float x, float y, int width, uint8_t *data, uint32_t size, ALLEGRO_COLOR fg, ALLEGRO_COLOR bg) {
 
     uint32_t i;
-    uint8_t m;
+    uint8_t m, pattern;
     uint8_t *ptr;
-    uint8_t pattern;
     float nx, ny;
     float posx, posy;
 
@@ -240,7 +242,7 @@ void draw_raster(float x, float y, uint8_t *data, uint32_t size, ALLEGRO_COLOR f
 
         for (m = 0; m < 8; m++) {
 
-            if (pattern & rmask[m]) {
+            if (pattern & raster_mask[m]) {
                 al_draw_pixel(posx, posy, fg);
             }
             else {
@@ -249,7 +251,7 @@ void draw_raster(float x, float y, uint8_t *data, uint32_t size, ALLEGRO_COLOR f
 
             nx++;
             posx = nx + x;
-            if (posx >= RASTER_LINE_SIZE) {
+            if (posx >= width) {
                 nx = 0;
                 ny++;
                 posy = ny + y;
@@ -293,18 +295,18 @@ int main()  {
     al_clear_to_color(BLACK);
 
     // draw a horizontal line
-    line(true, 10, 10, 200, 10);
+    line(true, 10, 10, 200, 10, C585NM, BLACK);
     // draw a vertical line
-    line(true, 200, 10, 200, 300);
-    // draw diagnol
-    line(true, 200, 300, 10, 10);
-    line(false, 200, 300, 400, 300);
-    line(false, 200, 300, 400, 10);
+    line(true, 200, 10, 200, 300, C585NM, BLACK);
+    // draw diagonal
+    line(true, 200, 300, 10, 10, C585NM, BLACK);
+    line(false, 200, 300, 400, 300, C585NM, BLACK);
+    line(false, 200, 300, 400, 10, C585NM, BLACK);
 
     // draw a dashed rectangle
-    rect(true, 10, 400, 400, 500);
+    rect(true, 10, 400, 400, 500, C585NM, BLACK);
     // draw a filled rectangle
-    rect_filled(10, 550, 400, 600, C585NM);
+    rect_filled(10, 550, UINT16_MAX, 400, 600, C585NM);
 
     // draw dashed circle
     circle(true, 60, 300, 50, C585NM, BLACK, LINE_WIDTH);
@@ -314,7 +316,7 @@ int main()  {
     uint8_t *file_in_mem;
     struct stat sb;
     file_in_mem = get_raster_file(RASTER_FILE, &sb);
-    draw_raster(0, 610, file_in_mem+0, sb.st_size, C585NM, BLACK);
+    draw_raster(0, 610, 512, file_in_mem+0, sb.st_size, C585NM, BLACK);
 
     // update display
     al_flip_display();
