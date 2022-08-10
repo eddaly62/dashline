@@ -33,6 +33,44 @@
 #define DASH_PER_CIRCLE 40
 #define PIX_PER_DASH    10
 #define LINE_WIDTH      2
+#define TEXTURE_LINE_WIDTH 1
+
+// add texture to rectangle
+void texture_rect(float x0, float y0, float x1, float y1, uint16_t t, ALLEGRO_COLOR fg, ALLEGRO_COLOR bg) {
+
+    int i;
+    int n, m;
+    uint16_t tmask;
+    float posx0, posy0, posx1, posy1;
+
+    n = (int)(x1 - x0);
+    posx0 = x0;
+    posy0 = y0;
+    posx1 = x0;
+    posy1 = y1;
+    printf("sizeof t = %ld\n", sizeof(uint16_t));
+
+    for (i = 0; i < n; i++) {
+
+        m = i % 16;
+        if (m == 0) {
+            tmask = 0x8000;
+        }
+        printf("m = %u\n", m);
+        printf("tmask = %u\n", tmask);
+        printf("tmask & t = %u\n", tmask& t);
+        if (t & tmask) {
+            al_draw_line(posx0, posy0, posx1, posy1, fg, TEXTURE_LINE_WIDTH);
+        }
+        else {
+            al_draw_line(posx0, posy0, posx1, posy1, bg, TEXTURE_LINE_WIDTH);
+        }
+
+        tmask = tmask >> 1;
+        posx0 = x0 + (float)i;
+        posx1 = x0 + (float)i;
+    }
+}
 
 void dline(float x0, float y0, float x1, float y1, ALLEGRO_COLOR fg, ALLEGRO_COLOR bg) {
     float l;
@@ -153,11 +191,12 @@ void rect(bool dash, float x0, float y0, float x1, float y1, ALLEGRO_COLOR fg, A
 
 // draw a rectangle, filled with a solid color
 void rect_filled(float x0, float y0, float x1, float y1, uint16_t t, ALLEGRO_COLOR fg, ALLEGRO_COLOR bg) {
-    if (t == UINT16_MAX) {
+    if (t == 0xffff) {
         al_draw_filled_rectangle(x0, y0, x1, y1, fg);
     }
     else {
-            // todo
+        texture_rect(x0, y0, x1, y1, t, fg, bg);
+        rect(false, x0, y0, x1, y1, fg, bg);
     }
 }
 
@@ -195,6 +234,9 @@ void circle(bool dash, float x, float y, float r, ALLEGRO_COLOR fg, ALLEGRO_COLO
 
 // get raster data
  uint8_t * get_raster_file(char *filename, struct stat *sb) {
+
+    assert(filename != NULL);
+    assert(sb != NULL);
 
     int fd;
     int r;
@@ -306,7 +348,7 @@ int main()  {
     // draw a dashed rectangle
     rect(true, 10, 400, 400, 500, C585NM, BLACK);
     // draw a filled rectangle
-    rect_filled(10, 550, UINT16_MAX, 400, 600, C585NM);
+    rect_filled(10, 550, 400, 600, 0xF0F0, C585NM, BLACK);
 
     // draw dashed circle
     circle(true, 60, 300, 50, C585NM, BLACK, LINE_WIDTH);
