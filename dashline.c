@@ -34,8 +34,59 @@
 #define PIX_PER_DASH    5
 #define LINE_WIDTH      1
 #define TEXTURE_LINE_WIDTH 1
+#define TEXTURE_BITS    16
+#define STARTING_TEXTURE_MASK   0x8000
 
-// add texture to rectangle
+// add texture to a circle
+void texture_circle(float x1, float y1, float r, uint16_t t, ALLEGRO_COLOR fg, ALLEGRO_COLOR bg) {
+
+    int i;
+    int n, m;
+    uint16_t tmask;
+    float posyt, posyb, posxs, posx, dy;
+
+    posyt = y1;
+    posyb = y1;
+    posxs = x1 - r;
+    //posxe = x1 + r;
+    posx = posxs;
+    n = (int)(2 * r);
+
+    for (i = 0; i < n; i++) {
+
+        m = i % TEXTURE_BITS;
+        if (m == 0) {
+            tmask = STARTING_TEXTURE_MASK;
+        }
+        printf("m = %u\n", m);
+        printf("tmask = %u\n", tmask);
+        printf("tmask & t = %u\n", tmask & t);
+
+        // calculate the start and end of a vertical line to use for texture
+        // circle equation: (x-x1)^2 + (y-y1)^2 = r^2
+        // x1, y1 is the center of the circle and r is the radius
+        // solve for y top and bottom for a series of x values
+        posyt = sqrtf(powf(r,2) - powf((posx - x1),2)) + y1;
+        posyb = y1 - (posyt - y1);
+        dy = posyt - posyb;
+
+        if (t & tmask) {
+            if (dy > 0) {
+                al_draw_line(posx, posyt, posx, posyb, fg, TEXTURE_LINE_WIDTH);
+            }
+        }
+        else {
+            if (dy > 0) {
+                al_draw_line(posx, posyt, posx, posyb, bg, TEXTURE_LINE_WIDTH);
+            }
+        }
+
+        tmask = tmask >> 1;
+        posx = posxs + (float)i;
+    }
+}
+
+// add texture to a rectangle
 void texture_rect(float x0, float y0, float x1, float y1, uint16_t t, ALLEGRO_COLOR fg, ALLEGRO_COLOR bg) {
 
     int i;
@@ -52,13 +103,13 @@ void texture_rect(float x0, float y0, float x1, float y1, uint16_t t, ALLEGRO_CO
 
     for (i = 0; i < n; i++) {
 
-        m = i % 16;
+        m = i % TEXTURE_BITS;
         if (m == 0) {
-            tmask = 0x8000;
+            tmask = STARTING_TEXTURE_MASK;
         }
-        printf("m = %u\n", m);
-        printf("tmask = %u\n", tmask);
-        printf("tmask & t = %u\n", tmask& t);
+        //printf("m = %u\n", m);
+        //printf("tmask = %u\n", tmask);
+        //printf("tmask & t = %u\n", tmask& t);
         if (t & tmask) {
             al_draw_line(posx0, posy0, posx1, posy1, fg, TEXTURE_LINE_WIDTH);
         }
@@ -97,9 +148,9 @@ void dline(float x0, float y0, float x1, float y1, ALLEGRO_COLOR fg, ALLEGRO_COL
     }
     pps = l / (float)nl;
 
-    printf("number of dashes = %d\n", nl);
-    printf("length per dash = %f\n", pps);
-    printf("m = %f\n", m);
+    //printf("number of dashes = %d\n", nl);
+    //printf("length per dash = %f\n", pps);
+    //printf("m = %f\n", m);
 
     dy = y1 - y0;
     dx = x1 - x0;
@@ -130,6 +181,7 @@ void dline(float x0, float y0, float x1, float y1, ALLEGRO_COLOR fg, ALLEGRO_COL
             }
         }
         else {
+            // slope is neither 0 or infinite
             // knowing the slope and dash length, calculate the ending x and y points
             m = (y1 -y0) / (x1 - x0);
             dxn = (pps / sqrt(1 + (m * m)));
@@ -201,7 +253,7 @@ void rect_filled(float x0, float y0, float x1, float y1, bool dash, uint16_t t, 
 }
 
 // draw a dashed circle
-void dcircle(float x, float y, float r, ALLEGRO_COLOR fg, ALLEGRO_COLOR bg, float t) {
+void dcircle(float x, float y, float r, ALLEGRO_COLOR fg, ALLEGRO_COLOR bg, float tl) {
 
     int i;
     float ds, dd;
@@ -210,26 +262,26 @@ void dcircle(float x, float y, float r, ALLEGRO_COLOR fg, ALLEGRO_COLOR bg, floa
 
     for ( i = 0; i < DASH_PER_CIRCLE; i++) {
         ds = i * dd;
-        if (i %2 != 0) {
-            al_draw_arc(x, y, r, ds, dd, fg, t);
+        if (i % 2 != 0) {
+            al_draw_arc(x, y, r, ds, dd, fg, tl);
         }
         else {
-            al_draw_arc(x, y, r, ds, dd, bg, t);
+            al_draw_arc(x, y, r, ds, dd, bg, tl);
         }
     }
 }
 
 // draw a dashed or solid circle
-void circle(bool dash, float x, float y, float r, ALLEGRO_COLOR fg, ALLEGRO_COLOR bg, float t) {
+void circle(bool dash, float x, float y, float r, uint16_t tx, ALLEGRO_COLOR fg, ALLEGRO_COLOR bg, float tl) {
 
-    if (dash == true) {
-        dcircle(x, y, r, fg, bg, t);
+    //if (dash == true) {
+        dcircle(x, y, r, fg, bg, tl);
+        texture_circle(x, y, r, tx , fg, bg);
+    //}
+    //else {
+    //    al_draw_circle(x, y, r, fg, t);
 
-    }
-    else {
-        al_draw_circle(x, y, r, fg, t);
-
-    }
+    //}
 }
 
 // get raster data
@@ -306,7 +358,7 @@ void draw_raster(float x, float y, int width, uint8_t *data, uint32_t size, ALLE
 
 int main()  {
 
-    int r;
+    //int r;
     bool running = true;
 
     ALLEGRO_DISPLAY *display = NULL;
@@ -353,7 +405,7 @@ int main()  {
 
 
     // draw dashed circle
-    circle(true, 60, 300, 50, C585NM, BLACK, LINE_WIDTH);
+    circle(false, 60, 300, 50, 0xF0F0, C585NM, BLACK, TEXTURE_LINE_WIDTH);
 
     // draw raster pattern
     #define RASTER_FILE "dap_raster_test.bmp"
