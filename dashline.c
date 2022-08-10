@@ -30,9 +30,9 @@
 #define HOME_Y      0
 
 #define RAD_PER_CIRCLE  ((float)2 * M_PI)
-#define DASH_PER_CIRCLE 40
-#define PIX_PER_DASH    10
-#define LINE_WIDTH      2
+#define DASH_PER_CIRCLE 60
+#define PIX_PER_DASH    5
+#define LINE_WIDTH      1
 #define TEXTURE_LINE_WIDTH 1
 
 // add texture to rectangle
@@ -190,13 +190,13 @@ void rect(bool dash, float x0, float y0, float x1, float y1, ALLEGRO_COLOR fg, A
 }
 
 // draw a rectangle, filled with a solid color
-void rect_filled(float x0, float y0, float x1, float y1, uint16_t t, ALLEGRO_COLOR fg, ALLEGRO_COLOR bg) {
+void rect_filled(float x0, float y0, float x1, float y1, bool dash, uint16_t t, ALLEGRO_COLOR fg, ALLEGRO_COLOR bg) {
     if (t == 0xffff) {
         al_draw_filled_rectangle(x0, y0, x1, y1, fg);
     }
     else {
         texture_rect(x0, y0, x1, y1, t, fg, bg);
-        rect(false, x0, y0, x1, y1, fg, bg);
+        rect(dash, x0, y0, x1, y1, fg, bg);
     }
 }
 
@@ -348,7 +348,9 @@ int main()  {
     // draw a dashed rectangle
     rect(true, 10, 400, 400, 500, C585NM, BLACK);
     // draw a filled rectangle
-    rect_filled(10, 550, 400, 600, 0xF0F0, C585NM, BLACK);
+    //rect_filled(10, 550, 400, 600, 0xF0F0, C585NM, BLACK);
+    rect_filled(10, 550, 400, 600, true, 0xAAAA, C585NM, BLACK);
+
 
     // draw dashed circle
     circle(true, 60, 300, 50, C585NM, BLACK, LINE_WIDTH);
