@@ -36,6 +36,8 @@
 #define TEXTURE_LINE_WIDTH 1
 #define TEXTURE_BITS    16
 #define STARTING_TEXTURE_MASK   0x8000
+#define RASTER_BITS    8
+#define STARTING_RASTER_MASK   0x80
 
 // add texture to a circle
 void texture_circle(float x1, float y1, float r, uint16_t t, ALLEGRO_COLOR fg, ALLEGRO_COLOR bg) {
@@ -45,10 +47,10 @@ void texture_circle(float x1, float y1, float r, uint16_t t, ALLEGRO_COLOR fg, A
     uint16_t tmask;
     float posyt, posyb, posxs, posx, dy;
 
+    tmask = STARTING_TEXTURE_MASK;
     posyt = y1;
     posyb = y1;
     posxs = x1 - r;
-    //posxe = x1 + r;
     posx = posxs;
     n = (int)(2 * r);
 
@@ -94,6 +96,7 @@ void texture_rect(float x0, float y0, float x1, float y1, uint16_t t, ALLEGRO_CO
     uint16_t tmask;
     float posx0, posy0, posx1, posy1;
 
+    tmask = STARTING_TEXTURE_MASK;
     n = (int)(x1 - x0);
     posx0 = x0;
     posy0 = y0;
@@ -253,7 +256,7 @@ void rect_filled(float x0, float y0, float x1, float y1, bool dash, uint16_t t, 
 }
 
 // draw a dashed circle
-void dcircle(float x, float y, float r, ALLEGRO_COLOR fg, ALLEGRO_COLOR bg, float tl) {
+void dcircle(float x, float y, float r, ALLEGRO_COLOR fg, ALLEGRO_COLOR bg) {
 
     int i;
     float ds, dd;
@@ -263,28 +266,28 @@ void dcircle(float x, float y, float r, ALLEGRO_COLOR fg, ALLEGRO_COLOR bg, floa
     for ( i = 0; i < DASH_PER_CIRCLE; i++) {
         ds = i * dd;
         if (i % 2 != 0) {
-            al_draw_arc(x, y, r, ds, dd, fg, tl);
+            al_draw_arc(x, y, r, ds, dd, fg, TEXTURE_LINE_WIDTH);
         }
         else {
-            al_draw_arc(x, y, r, ds, dd, bg, tl);
+            al_draw_arc(x, y, r, ds, dd, bg, TEXTURE_LINE_WIDTH);
         }
     }
 }
 
 // draw a dashed or solid circle
-void circle(bool dash, float x, float y, float r, uint16_t tx, ALLEGRO_COLOR fg, ALLEGRO_COLOR bg, float tl) {
+void circle(bool dash, float x, float y, float r, uint16_t tx, ALLEGRO_COLOR fg, ALLEGRO_COLOR bg) {
 
-    //if (dash == true) {
-        dcircle(x, y, r, fg, bg, tl);
+    if (dash == true) {
+        dcircle(x, y, r, fg, bg);
         texture_circle(x, y, r, tx , fg, bg);
-    //}
-    //else {
-    //    al_draw_circle(x, y, r, fg, t);
-
-    //}
+    }
+    else {
+        al_draw_circle(x, y, r, fg, TEXTURE_LINE_WIDTH);
+    }
 }
 
 // get raster data
+// open file and memory map so it can be accessed as an array
  uint8_t * get_raster_file(char *filename, struct stat *sb) {
 
     assert(filename != NULL);
@@ -303,23 +306,11 @@ void circle(bool dash, float x, float y, float r, uint16_t tx, ALLEGRO_COLOR fg,
     return (uint8_t *)file_in_mem;
 }
 
-
-const uint8_t raster_mask[8] = {
-    0b10000000,
-    0b01000000,
-    0b00100000,
-    0b00010000,
-    0b00001000,
-    0b00000100,
-    0b00000010,
-    0b00000001,
-};
-
 // draw raster pattern
 void draw_raster(float x, float y, int width, uint8_t *data, uint32_t size, ALLEGRO_COLOR fg, ALLEGRO_COLOR bg) {
 
     uint32_t i;
-    uint8_t m, pattern;
+    uint8_t m, rmask, pattern;
     uint8_t *ptr;
     float nx, ny;
     float posx, posy;
@@ -329,29 +320,32 @@ void draw_raster(float x, float y, int width, uint8_t *data, uint32_t size, ALLE
     ny = 0;
     posx = x;
     posy = y;
+    rmask = STARTING_RASTER_MASK;
 
-    for (i = 0; i < size; i++) {
+    for (i = 0; i < (size * (uint32_t)RASTER_BITS); i++) {
 
-        pattern = *ptr;
-
-        for (m = 0; m < 8; m++) {
-
-            if (pattern & raster_mask[m]) {
-                al_draw_pixel(posx, posy, fg);
-            }
-            else {
-                al_draw_pixel(posx, posy, bg);
-            }
-
-            nx++;
-            posx = nx + x;
-            if (posx >= width) {
-                nx = 0;
-                ny++;
-                posy = ny + y;
-            }
+        m = i % (uint32_t)RASTER_BITS;
+        if (m == 0) {
+            pattern = *ptr;
+            ptr++;
+            rmask = STARTING_RASTER_MASK;
         }
-        ptr++;
+
+        if (pattern & rmask) {
+            al_draw_pixel(posx, posy, fg);
+        }
+        else {
+            al_draw_pixel(posx, posy, bg);
+        }
+
+        nx++;
+        posx = nx + x;
+        if (posx >= width) {
+            nx = 0;
+            ny++;
+            posy = ny + y;
+        }
+        rmask = rmask >> 1;
     }
 }
 
@@ -401,11 +395,11 @@ int main()  {
     rect(true, 10, 400, 400, 500, C585NM, BLACK);
     // draw a filled rectangle
     //rect_filled(10, 550, 400, 600, 0xF0F0, C585NM, BLACK);
-    rect_filled(10, 550, 400, 600, true, 0xAAAA, C585NM, BLACK);
+    rect_filled(10, 550, 400, 600, false, 0x0101, C585NM, BLACK);
 
 
     // draw dashed circle
-    circle(false, 60, 300, 50, 0xF0F0, C585NM, BLACK, TEXTURE_LINE_WIDTH);
+    circle(true, 60, 300, 50, 0xF0F0, C585NM, BLACK);
 
     // draw raster pattern
     #define RASTER_FILE "dap_raster_test.bmp"
