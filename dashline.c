@@ -149,6 +149,27 @@ void dap_set_graph_style_hash(GRAPH_OBJ *go, uint16_t hash) {
     go->gs.pattern = hash;
 }
 
+// set graphic style clip or wrap if graphic is outside of viewable window
+void dap_set_graph_style_clip(GRAPH_OBJ *go, bool clip) {
+
+    assert(go != NULL);
+    go->gs.clip = clip;
+}
+
+// set graphic style fill, type of fill for circle and rectangles
+void dap_set_graph_style_fill(GRAPH_OBJ *go, int filltype) {
+
+    assert(go != NULL);
+    go->gs.fill = filltype;
+}
+
+// set graphic style border, type of border for circle and rectangles
+void dap_set_graph_style_border(GRAPH_OBJ *go, int bordertype) {
+
+    assert(go != NULL);
+    go->gs.border = bordertype;
+}
+
 // set graphic style
 void dap_set_graph_style(GRAPH_OBJ *go, int gb, int gf, uint16_t hash) {
 
@@ -200,19 +221,19 @@ void dap_set_raster(GRAPH_OBJ *go, float x0, float y0, uint8_t *rptr, size_t len
 }
 
 
-#if 0
-// add texture to a circle
-void texture_circle(float x1, float y1, float r, uint16_t t, ALLEGRO_COLOR fg, ALLEGRO_COLOR bg) {
+// fill circle with vertical bars
+void circle_fill_vertbar(GRAPH_OBJ *go) {
 
     int i;
     int n, m;
     uint16_t tmask;
-    float posyt, posyb, posxs, posx, dy;
+    float posyt, posyb, posxs, posx, dy, r;
 
     tmask = STARTING_TEXTURE_MASK;
-    posyt = y1;
-    posyb = y1;
-    posxs = x1 - r;
+    r = go->gcirc.radius;
+    posyt = go->gcirc.y;
+    posyb = go->gcirc.y;
+    posxs = go->gcirc.x - r;
     posx = posxs;
     n = (int)(2 * r);
 
@@ -222,26 +243,26 @@ void texture_circle(float x1, float y1, float r, uint16_t t, ALLEGRO_COLOR fg, A
         if (m == 0) {
             tmask = STARTING_TEXTURE_MASK;
         }
-        printf("m = %u\n", m);
-        printf("tmask = %u\n", tmask);
-        printf("tmask & t = %u\n", tmask & t);
+        //printf("m = %u\n", m);
+        //printf("tmask = %u\n", tmask);
+        //printf("tmask & t = %u\n", tmask & t);
 
         // calculate the start and end of a vertical line to use for texture
         // circle equation: (x-x1)^2 + (y-y1)^2 = r^2
         // x1, y1 is the center of the circle and r is the radius
         // solve for y top and bottom for a series of x values
-        posyt = sqrtf(powf(r,2) - powf((posx - x1),2)) + y1;
-        posyb = y1 - (posyt - y1);
+        posyt = sqrtf(powf(r,2) - powf((posx - go->gcirc.x),2)) + go->gcirc.y;
+        posyb = go->gcirc.y - (posyt - go->gcirc.y);
         dy = posyt - posyb;
 
-        if (t & tmask) {
+        if (go->gs.pattern & tmask) {
             if (dy > 0) {
-                al_draw_line(posx, posyt, posx, posyb, fg, TEXTURE_LINE_WIDTH);
+                al_draw_line(posx, posyt, posx, posyb, go->gc.fg, TEXTURE_LINE_WIDTH);
             }
         }
         else {
             if (dy > 0) {
-                al_draw_line(posx, posyt, posx, posyb, bg, TEXTURE_LINE_WIDTH);
+                al_draw_line(posx, posyt, posx, posyb, go->gc.bg, TEXTURE_LINE_WIDTH);
             }
         }
 
@@ -250,7 +271,96 @@ void texture_circle(float x1, float y1, float r, uint16_t t, ALLEGRO_COLOR fg, A
     }
 }
 
-#endif
+// fill circle with texture pattern
+void circle_fill_pattern(GRAPH_OBJ *go) {
+
+    int i, r;
+    int n, q;
+    uint16_t tmask;
+    float posyt, posyb, posxs, posx, posy, dy, rad;
+
+    //tmask = STARTING_TEXTURE_MASK;
+    rad = go->gcirc.radius;
+    posyt = go->gcirc.y;
+    posyb = go->gcirc.y;
+    posxs = go->gcirc.x - rad;
+    posx = posxs;
+    n = (int)(2 * rad);
+
+    for (i = 0; i <= n; i++) {
+
+        //m = i % TEXTURE_BITS;
+        //if (m == 0) {
+        //    tmask = STARTING_TEXTURE_MASK;
+        //}
+        //printf("m = %u\n", m);
+        //printf("tmask = %u\n", tmask);
+        //printf("tmask & t = %u\n", tmask & t);
+
+        // calculate the start and end of a vertical line to use for texture
+        // circle equation: (x-x1)^2 + (y-y1)^2 = r^2
+        // x1, y1 is the center of the circle and r is the radius
+        // solve for y top and bottom for a series of x values
+        posyb = sqrtf(powf(rad,2) - powf((posx - go->gcirc.x),2)) + go->gcirc.y;
+        posyt = go->gcirc.y - (posyb - go->gcirc.y);
+        dy = posyb - posyt;
+        printf("dy=%f\n", dy);
+
+        q = (int)(dy);
+        for (r = 0; r <= q; r++) {
+
+            posy = (float)r + posyt;
+            tmask = texture_mask(go, posx, posy);
+
+            if (go->gs.pattern & tmask) {
+                al_draw_pixel(posx, posy, go->gc.fg);
+            }
+            else {
+                al_draw_pixel(posx, posy, go->gc.bg);
+            }
+
+        }
+
+        //tmask = tmask >> 1;
+        posx = posxs + (float)i;
+
+    }
+}
+
+// fill circle with solid fill
+void circle_fill_solid(GRAPH_OBJ *go) {
+
+    int i, r;
+    int n, q;
+    float posyt, posyb, posxs, posx, posy, dy, rad;
+
+    rad = go->gcirc.radius;
+    posyt = go->gcirc.y;
+    posyb = go->gcirc.y;
+    posxs = go->gcirc.x - rad;
+    posx = posxs;
+    n = (int)(2 * rad);
+
+    for (i = 0; i <= n; i++) {
+
+        // calculate the start and end of a vertical line to use for texture
+        // circle equation: (x-x1)^2 + (y-y1)^2 = r^2
+        // x1, y1 is the center of the circle and r is the radius
+        // solve for y top and bottom for a series of x values
+        posyb = sqrtf(powf(rad,2) - powf((posx - go->gcirc.x),2)) + go->gcirc.y;
+        posyt = go->gcirc.y - (posyb - go->gcirc.y);
+        dy = posyb - posyt;
+
+        q = (int)(dy);
+        for (r = 0; r <= q; r++) {
+
+            posy = (float)r + posyt;
+            al_draw_pixel(posx, posy, go->gc.fg);
+        }
+        posx = posxs + (float)i;
+    }
+}
+
 
 // add vertical pattern to a rectangle
 void rect_fill_vertbar(GRAPH_OBJ *go) {
@@ -597,6 +707,36 @@ void dp_draw_rectangle_fill(GRAPH_OBJ *go) {
     }
 }
 
+
+// draw circle fill
+void dp_draw_circle_fill(GRAPH_OBJ *go) {
+
+    assert(go != NULL);
+    if (go->gtype == TYPE_CIRCLE) {
+
+        switch(go->gs.fill)
+        {
+            case FILL_SOLID:
+            circle_fill_solid(go);
+            break;
+
+            case FILL_VERTBARS:
+            circle_fill_vertbar(go);
+            break;
+
+            case FILL_PATTERN:
+            circle_fill_pattern(go);
+            break;
+
+            default:
+            assert(go->gs.fill < FILL_MAX);
+            break;
+        };
+    }
+}
+
+
+
 #if 0
 // draw a rectangle, solid or dashed outline
 void rect(bool dash, float x0, float y0, float x1, float y1, ALLEGRO_COLOR fg, ALLEGRO_COLOR bg) {
@@ -746,9 +886,10 @@ int main()  {
     //al_register_event_source(q, al_get_display_event_source(display));
     al_register_event_source(q, al_get_timer_event_source(timer));
 
+    dap_set_graph_style_clip(&g, false);
     dap_set_graph_type(&g, TYPE_RECTANGLE);
     dap_set_graph_color(&g, false, C585NM, BLACK);
-    dap_set_graph_style(&g, BORDER_PATTERN, FILL_SOLID, 0xFF00);
+    dap_set_graph_style(&g, BORDER_PATTERN, FILL_VERTBARS, 0xFF00);
     // set circle
     //void dap_set_circle(GRAPH_OBJ *go, float x, float y, float r) {
     // set rectangle
@@ -773,8 +914,14 @@ int main()  {
     dap_draw_line(&g);
 
     // draw vertical bars fill
+    dap_set_graph_style_fill(&g, FILL_PATTERN);
     dap_set_rectangle(&g, 10, 550, 400, 600);
     dp_draw_rectangle_fill(&g);
+
+    // draw circle fill
+    dap_set_graph_style_fill(&g, FILL_PATTERN);
+    dap_set_circle(&g, 60, 300, 50);
+    dp_draw_circle_fill(&g);
 
     //line(false, 200, 300, 400, 300, C585NM, BLACK);
     //line(false, 200, 300, 400, 10, C585NM, BLACK);
