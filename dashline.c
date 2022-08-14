@@ -13,6 +13,7 @@
 #include <pthread.h>
 #include <float.h>
 #include <math.h>
+#include <assert.h>
 
 #include <allegro5/allegro.h>
 #include <allegro5/allegro_font.h>
@@ -22,8 +23,8 @@
 #include "dashline.h"
 
 // window size and location
-#define WIN_WIDTH   512
-#define WIN_HEIGHT  700
+#define WIN_WIDTH   1024
+#define WIN_HEIGHT  768
 #define WIN_LOC_X   400
 #define WIN_LOC_Y   10
 #define HOME_X      0
@@ -31,7 +32,7 @@
 
 #define RAD_PER_CIRCLE  ((float)2 * M_PI)
 #define DASH_PER_CIRCLE 60
-#define PIX_PER_DASH    5
+#define PIX_PER_DASH    10
 #define LINE_WIDTH      1
 #define TEXTURE_LINE_WIDTH 1
 #define TEXTURE_BITS    16
@@ -39,6 +40,167 @@
 #define RASTER_BITS    8
 #define STARTING_RASTER_MASK   0x80
 
+enum GBORDER {
+    BORDER_NONE,
+    BORDER_SOLID,
+    BORDER_DASH,
+    BORDER_PATTERN,
+    BORDER_MAX,
+};
+
+enum GFILL {
+    FILL_NONE,
+    FILL_SOLID,
+    FILL_VERTBARS,
+    FILL_PATTERN,
+    FILL_MAX,
+};
+
+enum GTYPE {
+    TYPE_LINE,
+    TYPE_CIRCLE,
+    TYPE_RECTANGLE,
+    TYPE_RASTER,
+    TYPE_MAX,
+};
+
+typedef struct gclr {
+    ALLEGRO_COLOR fg;  // foreground color
+    ALLEGRO_COLOR bg;  // background color
+    bool invert;
+} GCOLOR;
+
+typedef struct gs {
+    int border;         // valid values are in enum GBORDER
+    int fill;           // valid values are in enum GFILL
+    uint16_t pattern;   // hash pattern
+    bool clip;          // if true, clip if not viewable, otherwise wrap
+} GSTYLE;
+
+typedef struct gc{
+    float x;
+    float y;
+    float radius;
+} GCIRCLE;
+
+typedef struct gr{
+    float x0;
+    float y0;
+    float x1;
+    float y1;
+} GRECTANGLE;
+
+typedef struct gl{
+    float x0;
+    float y0;
+    float x1;
+    float y1;
+} GLINE;
+
+typedef struct grast {
+    uint8_t *rdataptr;
+    size_t  length;
+} GRASTER;
+
+typedef struct gro {
+    int     gtype;      // Valid values are defined in the GTYPE enum
+    GCOLOR  gc;
+    GSTYLE  gs;
+
+    union {
+        GCIRCLE gcirc;
+        GLINE   gline;
+        GRASTER grast;
+        GRECTANGLE   grect;
+    };
+
+} GRAPH_OBJ;
+
+GCOLOR      gcolor;
+GSTYLE      gstyle;
+GRAPH_OBJ   g;
+
+// texture mask
+uint16_t texture_mask(GRAPH_OBJ *go, float x, float y) {
+    return go->gs.pattern & (1 << ((int)(x + y)) % 16);
+}
+
+// set graphic type
+void dap_set_graph_type(GRAPH_OBJ *go, int gt) {
+
+    assert(go != NULL);
+    go->gtype = gt;
+}
+
+
+// set graphics colors
+void dap_set_graph_color(GRAPH_OBJ *go, bool invert, ALLEGRO_COLOR fgc, ALLEGRO_COLOR bgc) {
+
+    assert(go != NULL);
+    go->gc.invert = invert;
+    memcpy(&go->gc.fg, &fgc, sizeof(ALLEGRO_COLOR));
+    memcpy(&go->gc.bg, &bgc, sizeof(ALLEGRO_COLOR));
+}
+
+// set graphic style hash pattern
+void dap_set_graph_style_hash(GRAPH_OBJ *go, uint16_t hash) {
+
+    assert(go != NULL);
+    go->gs.pattern = hash;
+}
+
+// set graphic style
+void dap_set_graph_style(GRAPH_OBJ *go, int gb, int gf, uint16_t hash) {
+
+    assert(go != NULL);
+    go->gs.border = (int)gb;
+    go->gs.fill = (int)gf;
+    go->gs.pattern = hash;
+}
+
+// set circle
+void dap_set_circle(GRAPH_OBJ *go, float x, float y, float r) {
+
+    assert(go != NULL);
+    go->gcirc.x = x;
+    go->gcirc.y = y;
+    go->gcirc.radius = r;
+    go->gtype = TYPE_CIRCLE;
+}
+
+// set rectangle
+void dap_set_rectangle(GRAPH_OBJ *go, float x0, float y0, float x1, float y1) {
+
+    assert(go != NULL);
+    go->grect.x0 = x0;
+    go->grect.y0 = y0;
+    go->grect.x1 = x1;
+    go->grect.y1 = y1;
+    go->gtype = TYPE_RECTANGLE;
+}
+
+// set line
+void dap_set_line(GRAPH_OBJ *go, float x0, float y0, float x1, float y1) {
+
+    assert(go != NULL);
+    go->gline.x0 = x0;
+    go->gline.y0 = y0;
+    go->gline.x1 = x1;
+    go->gline.y1 = y1;
+    go->gtype = TYPE_LINE;
+}
+
+// set raster
+void dap_set_raster(GRAPH_OBJ *go, float x0, float y0, uint8_t *rptr, size_t len) {
+
+    assert(go != NULL);
+    go->grast.rdataptr = rptr;
+    go->grast.length = len;
+    go->gtype = TYPE_RASTER;
+}
+
+
+#if 0
 // add texture to a circle
 void texture_circle(float x1, float y1, float r, uint16_t t, ALLEGRO_COLOR fg, ALLEGRO_COLOR bg) {
 
@@ -88,8 +250,10 @@ void texture_circle(float x1, float y1, float r, uint16_t t, ALLEGRO_COLOR fg, A
     }
 }
 
-// add texture to a rectangle
-void texture_rect(float x0, float y0, float x1, float y1, uint16_t t, ALLEGRO_COLOR fg, ALLEGRO_COLOR bg) {
+#endif
+
+// add vertical pattern to a rectangle
+void rect_fill_vertbar(GRAPH_OBJ *go) {
 
     int i;
     int n, m;
@@ -97,12 +261,11 @@ void texture_rect(float x0, float y0, float x1, float y1, uint16_t t, ALLEGRO_CO
     float posx0, posy0, posx1, posy1;
 
     tmask = STARTING_TEXTURE_MASK;
-    n = (int)(x1 - x0);
-    posx0 = x0;
-    posy0 = y0;
-    posx1 = x0;
-    posy1 = y1;
-    printf("sizeof t = %ld\n", sizeof(uint16_t));
+    n = (int)(go->grect.x1 - go->grect.x0);
+    posx0 = go->grect.x0;
+    posy0 = go->grect.y0;
+    posx1 = go->grect.x1;
+    posy1 = go->grect.y1;
 
     for (i = 0; i < n; i++) {
 
@@ -113,20 +276,178 @@ void texture_rect(float x0, float y0, float x1, float y1, uint16_t t, ALLEGRO_CO
         //printf("m = %u\n", m);
         //printf("tmask = %u\n", tmask);
         //printf("tmask & t = %u\n", tmask& t);
-        if (t & tmask) {
-            al_draw_line(posx0, posy0, posx1, posy1, fg, TEXTURE_LINE_WIDTH);
+        if (go->gs.pattern & tmask) {
+            al_draw_line(posx0, posy0, posx1, posy1, go->gc.fg, TEXTURE_LINE_WIDTH);
         }
         else {
-            al_draw_line(posx0, posy0, posx1, posy1, bg, TEXTURE_LINE_WIDTH);
+            al_draw_line(posx0, posy0, posx1, posy1, go->gc.bg, TEXTURE_LINE_WIDTH);
         }
 
         tmask = tmask >> 1;
-        posx0 = x0 + (float)i;
-        posx1 = x0 + (float)i;
+        posx0 = go->grect.x0 + (float)i;
+        posx1 = go->grect.x0 + (float)i;
     }
 }
 
-void dline(float x0, float y0, float x1, float y1, ALLEGRO_COLOR fg, ALLEGRO_COLOR bg) {
+// add texture pattern to a rectangle
+void rect_fill_texture(GRAPH_OBJ *go) {
+
+    int r, c, n, q;
+    uint16_t tmask;
+    float posx, posy;
+
+    n = (int)(go->grect.x1 - go->grect.x0);
+    q = (int)(go->grect.y1 - go->grect.y0);
+
+    posx = go->grect.x0;
+    posy = go->grect.y0;
+    //posx1 = go->grect.x1;
+    //posy1 = go->grect.y1;
+
+    for (r = 0; r < q; r++) {
+        for (c = 0; c < n; c++) {
+
+            //m = c % TEXTURE_BITS;
+            //if (m == 0) {
+            //    tmask = STARTING_TEXTURE_MASK;
+            //}
+            //printf("m = %u\n", m);
+            //printf("tmask = %u\n", tmask);
+            //printf("tmask & t = %u\n", tmask& t);
+
+            tmask = texture_mask(go, posx, posy);
+            if (go->gs.pattern & tmask) {
+                al_draw_pixel(posx, posy, go->gc.fg);
+            }
+            else {
+                al_draw_pixel(posx, posy, go->gc.bg);
+            }
+
+            //tmask = tmask >> 1;
+            posx = go->grect.x0 + (float)c;
+        }
+        posy = go->grect.y0 + (float)r;
+    }
+}
+
+// add solid fill to a rectangle
+void rect_fill_solid(GRAPH_OBJ *go) {
+
+    int r, c, n, q;
+    float posx, posy;
+
+    n = (int)(go->grect.x1 - go->grect.x0);
+    q = (int)(go->grect.y1 - go->grect.y0);
+
+    posx = go->grect.x0;
+    posy = go->grect.y0;
+
+    for (r = 0; r < q; r++) {
+        for (c = 0; c < n; c++) {
+
+            al_draw_pixel(posx, posy, go->gc.fg);
+
+            posx = go->grect.x0 + (float)c;
+        }
+        posy = go->grect.y0 + (float)r;
+    }
+}
+
+void line_hash(GRAPH_OBJ *go, float x0, float y0, float x1, float y1) {
+
+    assert(go != NULL);
+    float l;
+    float m;
+    float dx, dy;
+    float dxn, dyn;
+    float xs, ys;
+    float xe, ye;
+    //int nl;
+    int i;
+    //float pps;
+    uint16_t mask;
+
+    // determine length of line
+    l = sqrtf(powf((x1 - x0), (float)2) + powf((y1 - y0), (float)2));
+
+    // determine length of dash
+    //nl = ((int)(l / PIX_PER_DASH));
+    //if (nl % 2 == 0) {
+        // make it an odd number,
+        // so there is a solid dash at the start and end of the line
+    //    nl++;
+    //}
+    //pps = l / (float)nl;
+
+    dy = y1 - y0;
+    dx = x1 - x0;
+    xs = x0;
+    ys = y0;
+    for (i = 0; i < (int)l; i++) {
+
+        if (dy == 0) {
+            // slope is zero
+            if (x1 > x0) {
+                xe = xs + 1;
+                ye = ys;
+            }
+            else {
+                xe = xs - 1;
+                ye = ys;
+            }
+        }
+        else if (dx == 0) {
+            // slope is infinite
+            if (y1 > y0) {
+                xe = xs;
+                ye = ys + 1;
+            }
+            else {
+                xe = xs;
+                ye = ys + 1;
+            }
+        }
+        else {
+            // slope is neither 0 or infinite
+            // knowing the slope and dash length, calculate the ending x and y points
+            m = (y1 -y0) / (x1 - x0);
+            dxn = (1 / sqrt(1 + (m * m)));
+            dyn = m * dxn;
+            printf("dxn = %f, dyn = %f\n", dxn, dyn);
+
+            if (x1 > x0) {
+                xe = xs + dxn;
+            }
+            else {
+                xe = xs - dxn;
+            }
+
+            if (y1 > y0) {
+                ye = ys + dyn;
+            }
+            else {
+                ye = ys - dyn;
+            }
+        }
+
+        // draw
+        mask = texture_mask(go, xe, ye);
+        if (mask) {
+            al_draw_pixel(xe, ye, go->gc.fg);
+        }
+        else {
+            al_draw_pixel(xe, ye, go->gc.bg);
+        }
+
+        // initialize for next dash calculation
+        xs = xe;
+        ys = ye;
+    }
+}
+
+void line_dash(GRAPH_OBJ *go, float x0, float y0, float x1, float y1) {
+
+    assert(go != NULL);
     float l;
     float m;
     float dx, dy;
@@ -140,8 +461,6 @@ void dline(float x0, float y0, float x1, float y1, ALLEGRO_COLOR fg, ALLEGRO_COL
     // determine length of line
     l = sqrtf(powf((x1 - x0), (float)2) + powf((y1 - y0), (float)2));
 
-    printf("length = %f pixels\n", l);
-
     // determine length of dash
     nl = ((int)(l / PIX_PER_DASH));
     if (nl % 2 == 0) {
@@ -150,10 +469,6 @@ void dline(float x0, float y0, float x1, float y1, ALLEGRO_COLOR fg, ALLEGRO_COL
         nl++;
     }
     pps = l / (float)nl;
-
-    //printf("number of dashes = %d\n", nl);
-    //printf("length per dash = %f\n", pps);
-    //printf("m = %f\n", m);
 
     dy = y1 - y0;
     dx = x1 - x0;
@@ -207,32 +522,82 @@ void dline(float x0, float y0, float x1, float y1, ALLEGRO_COLOR fg, ALLEGRO_COL
 
         // draw a dash
         if (i % 2 ==  0) {
-            al_draw_line(xs, ys, xe, ye, fg, LINE_WIDTH);
+            // draw odd number segments with foreground color so
+            // start and end segments can be seen
+            al_draw_line(xs, ys, xe, ye, go->gc.fg, LINE_WIDTH);
         }
         else {
-            al_draw_line(xs, ys, xe, ye, bg, LINE_WIDTH);
+            al_draw_line(xs, ys, xe, ye, go->gc.bg, LINE_WIDTH);
         }
 
         // initialize for next dash calculation
         xs = xe;
         ys = ye;
-
-    }
-
-}
-
-void line(bool dash, float x0, float y0, float x1, float y1, ALLEGRO_COLOR fg, ALLEGRO_COLOR bg) {
-
-    if (dash == true) {
-        // draw a dashed line
-        dline(x0, y0, x1, y1, fg, bg);
-    }
-    else {
-        // draw a solid line
-        al_draw_line(x0, y0, x1, y1, fg, LINE_WIDTH);
     }
 }
 
+// draw a solid line
+void line_solid(GRAPH_OBJ *go, float x0, float y0, float x1, float y1) {
+
+    assert(go != NULL);
+    al_draw_line(x0, y0, x1, y1, go->gc.fg, LINE_WIDTH);
+}
+
+// draw a line
+void dap_draw_line(GRAPH_OBJ *go) {
+
+    assert(go != NULL);
+    if (go->gtype == TYPE_LINE) {
+
+        switch(go->gs.border)
+        {
+            case BORDER_SOLID:
+            line_solid(go, go->gline.x0, go->gline.y0, go->gline.x1, go->gline.y1);
+            break;
+
+            case BORDER_DASH:
+            line_dash(go, go->gline.x0, go->gline.y0, go->gline.x1, go->gline.y1);
+            break;
+
+            case BORDER_PATTERN:
+            line_hash(go, go->gline.x0, go->gline.y0, go->gline.x1, go->gline.y1);
+            break;
+
+            default:
+            assert(go->gs.border < BORDER_MAX);
+            break;
+        };
+    }
+}
+
+// draw rectangle fill
+void dp_draw_rectangle_fill(GRAPH_OBJ *go) {
+
+    assert(go != NULL);
+    if (go->gtype == TYPE_RECTANGLE) {
+
+        switch(go->gs.fill)
+        {
+            case FILL_SOLID:
+            rect_fill_solid(go);
+            break;
+
+            case FILL_VERTBARS:
+            rect_fill_vertbar(go);
+            break;
+
+            case FILL_PATTERN:
+            rect_fill_texture(go);
+            break;
+
+            default:
+            assert(go->gs.fill < FILL_MAX);
+            break;
+        };
+    }
+}
+
+#if 0
 // draw a rectangle, solid or dashed outline
 void rect(bool dash, float x0, float y0, float x1, float y1, ALLEGRO_COLOR fg, ALLEGRO_COLOR bg) {
     float w, h;
@@ -297,7 +662,10 @@ void circle(bool dash, float x, float y, float r, uint16_t tx, ALLEGRO_COLOR fg,
     int r;
     uint8_t *file_in_mem;
 
+    // open file and get stats (size)
     fd = open(filename, O_RDONLY, S_IRUSR | S_IWUSR);
+    assert(fd != -1);
+
     r = fstat(fd, sb);
     assert(r != -1);
 
@@ -348,7 +716,7 @@ void draw_raster(float x, float y, int width, uint8_t *data, uint32_t size, ALLE
         rmask = rmask >> 1;
     }
 }
-
+#endif
 
 int main()  {
 
@@ -378,19 +746,40 @@ int main()  {
     //al_register_event_source(q, al_get_display_event_source(display));
     al_register_event_source(q, al_get_timer_event_source(timer));
 
+    dap_set_graph_type(&g, TYPE_RECTANGLE);
+    dap_set_graph_color(&g, false, C585NM, BLACK);
+    dap_set_graph_style(&g, BORDER_PATTERN, FILL_SOLID, 0xFF00);
+    // set circle
+    //void dap_set_circle(GRAPH_OBJ *go, float x, float y, float r) {
+    // set rectangle
+    //void dap_set_rectangle(GRAPH_OBJ *go, float x0, float y0, float x1, float y1) {
+    // set raster
+    //void dap_set_raster(GRAPH_OBJ *go, float x0, float y0, uint8_t *rptr, size_t len) {
+
+
+
     // clear display
     al_set_target_backbuffer(display);
     al_clear_to_color(BLACK);
 
     // draw a horizontal line
-    line(true, 10, 10, 200, 10, C585NM, BLACK);
+    dap_set_line(&g, 10, 10, 200, 10);
+    dap_draw_line(&g);
     // draw a vertical line
-    line(true, 200, 10, 200, 300, C585NM, BLACK);
-    // draw diagonal
-    line(true, 200, 300, 10, 10, C585NM, BLACK);
-    line(false, 200, 300, 400, 300, C585NM, BLACK);
-    line(false, 200, 300, 400, 10, C585NM, BLACK);
+    dap_set_line(&g, 200, 10, 200, 250);
+    dap_draw_line(&g);
+    // draw diagonal line
+    dap_set_line(&g, 200, 250, 10, 10);
+    dap_draw_line(&g);
 
+    // draw vertical bars fill
+    dap_set_rectangle(&g, 10, 550, 400, 600);
+    dp_draw_rectangle_fill(&g);
+
+    //line(false, 200, 300, 400, 300, C585NM, BLACK);
+    //line(false, 200, 300, 400, 10, C585NM, BLACK);
+
+#if 0
     // draw a dashed rectangle
     rect(true, 10, 400, 400, 500, C585NM, BLACK);
     // draw a filled rectangle
@@ -407,7 +796,7 @@ int main()  {
     struct stat sb;
     file_in_mem = get_raster_file(RASTER_FILE, &sb);
     draw_raster(0, 610, 512, file_in_mem+0, sb.st_size, C585NM, BLACK);
-
+#endif
     // update display
     al_flip_display();
 
