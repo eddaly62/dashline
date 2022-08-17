@@ -44,7 +44,7 @@
 #define RASTER_BITS    8
 #define STARTING_RASTER_MASK   0x80
 
-// aliases 
+// aliases
 #define LINE_NONE   BORDER_NONE
 #define LINE_SOLID  BORDER_SOLID
 #define LINE_DASH   BORDER_DASH
