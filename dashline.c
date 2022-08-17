@@ -44,6 +44,12 @@
 #define RASTER_BITS    8
 #define STARTING_RASTER_MASK   0x80
 
+// aliases 
+#define LINE_NONE   BORDER_NONE
+#define LINE_SOLID  BORDER_SOLID
+#define LINE_DASH   BORDER_DASH
+#define LINE_PATTERN    BORDER_PATTERN
+
 enum GBORDER {
     BORDER_NONE,
     BORDER_SOLID,
@@ -72,7 +78,9 @@ typedef struct gclr {
     ALLEGRO_COLOR fg;  // foreground color
     ALLEGRO_COLOR bg;  // background color
     bool invert;
-} GCOLOR;
+    bool overlay;       // write only the foreground color
+    bool erase;         // make foreground equal to the background color and write only the foreground color
+} GCOLOR;               // and write only the foreground color
 
 typedef struct gs {
     int border;         // valid values are in enum GBORDER
@@ -82,20 +90,20 @@ typedef struct gs {
 } GSTYLE;
 
 typedef struct gc{
-    float x;
+    float x;            // circle parameters
     float y;
     float radius;
 } GCIRCLE;
 
 typedef struct gr{
-    float x0;
+    float x0;           // rectangle parameters
     float y0;
     float x1;
     float y1;
 } GRECTANGLE;
 
 typedef struct gl{
-    float x0;
+    float x0;           // line parameters
     float y0;
     float x1;
     float y1;
@@ -128,6 +136,8 @@ GRAPH_OBJ   g;
 
 // prototypes
 int dap_open_raster_file(GRAPH_OBJ *go, char *filename);
+void dap_draw_line(GRAPH_OBJ *go);
+
 
 
 // texture mask
@@ -139,6 +149,7 @@ uint16_t texture_mask(GRAPH_OBJ *go, float x, float y) {
 void dap_set_graph_type(GRAPH_OBJ *go, int gt) {
 
     assert(go != NULL);
+    assert(gt < TYPE_MAX);
     go->gtype = gt;
 }
 
@@ -152,10 +163,17 @@ void dap_set_graph_color(GRAPH_OBJ *go, bool invert, ALLEGRO_COLOR fgc, ALLEGRO_
 }
 
 // set graphic style hash pattern
-void dap_set_graph_style_hash(GRAPH_OBJ *go, uint16_t hash) {
+void dap_set_graph_style_pattern(GRAPH_OBJ *go, uint16_t pattern) {
 
     assert(go != NULL);
-    go->gs.pattern = hash;
+    go->gs.pattern = pattern;
+}
+
+// get graphic style hash pattern
+uint16_t dap_get_graph_style_pattern(GRAPH_OBJ *go) {
+
+    assert(go != NULL);
+    return go->gs.pattern;
 }
 
 // set graphic style clip or wrap if graphic is outside of viewable window
@@ -185,6 +203,9 @@ void dap_set_graph_style_border(GRAPH_OBJ *go, int bordertype) {
 void dap_set_graph_style(GRAPH_OBJ *go, int gb, int gf, uint16_t pattern) {
 
     assert(go != NULL);
+    assert(gf < FILL_MAX);
+    assert(gb < BORDER_MAX);
+
     go->gs.border = (int)gb;
     go->gs.fill = (int)gf;
     go->gs.pattern = pattern;
@@ -222,8 +243,6 @@ void dap_set_line(GRAPH_OBJ *go, float x0, float y0, float x1, float y1) {
     go->gtype = TYPE_LINE;
 }
 
-
-
 // set raster file
 // use when raster data is a file
 // return 0 if success, otherwise -1
@@ -237,6 +256,7 @@ int dap_set_raster_file(GRAPH_OBJ *go, char *filename, float x0, float y0, int w
     go->grast.x = x0;
     go->grast.y = y0;
     go->grast.width = width; // width of screen
+
     // open file and map into memory
     r = dap_open_raster_file(go, filename);
     return r;
@@ -301,9 +321,6 @@ void circle_fill_vertbar(GRAPH_OBJ *go) {
         if (m == 0) {
             tmask = STARTING_TEXTURE_MASK;
         }
-        //printf("m = %u\n", m);
-        //printf("tmask = %u\n", tmask);
-        //printf("tmask & t = %u\n", tmask & t);
 
         // calculate the start and end of a vertical line to use for texture
         // circle equation: (x-x1)^2 + (y-y1)^2 = r^2
@@ -315,13 +332,11 @@ void circle_fill_vertbar(GRAPH_OBJ *go) {
 
         if (go->gs.pattern & tmask) {
             if (dy > 0) {
-                //al_draw_line(posx, posyt, posx, posyb, go->gc.fg, TEXTURE_LINE_WIDTH);
                 draw_vert_line(posx, posyt, posyb, go->gc.fg);
             }
         }
         else {
             if (dy > 0) {
-                //al_draw_line(posx, posyt, posx, posyb, go->gc.bg, TEXTURE_LINE_WIDTH);
                 draw_vert_line(posx, posyt, posyb, go->gc.bg);
             }
         }
@@ -339,7 +354,6 @@ void circle_fill_pattern(GRAPH_OBJ *go) {
     uint16_t tmask;
     float posyt, posyb, posxs, posx, posy, dy, rad;
 
-    //tmask = STARTING_TEXTURE_MASK;
     rad = go->gcirc.radius;
     posyt = go->gcirc.y;
     posyb = go->gcirc.y;
@@ -349,14 +363,6 @@ void circle_fill_pattern(GRAPH_OBJ *go) {
 
     for (i = 0; i <= n; i++) {
 
-        //m = i % NUM_OF_TEXTURE_BITS;
-        //if (m == 0) {
-        //    tmask = STARTING_TEXTURE_MASK;
-        //}
-        //printf("m = %u\n", m);
-        //printf("tmask = %u\n", tmask);
-        //printf("tmask & t = %u\n", tmask & t);
-
         // calculate the start and end of a vertical line to use for texture
         // circle equation: (x-x1)^2 + (y-y1)^2 = r^2
         // x1, y1 is the center of the circle and r is the radius
@@ -364,7 +370,6 @@ void circle_fill_pattern(GRAPH_OBJ *go) {
         posyb = sqrtf(powf(rad,2) - powf((posx - go->gcirc.x),2)) + go->gcirc.y;
         posyt = go->gcirc.y - (posyb - go->gcirc.y);
         dy = posyb - posyt;
-        printf("dy=%f\n", dy);
 
         q = (int)(dy);
         for (r = 0; r <= q; r++) {
@@ -381,7 +386,6 @@ void circle_fill_pattern(GRAPH_OBJ *go) {
 
         }
 
-        //tmask = tmask >> 1;
         posx = posxs + (float)i;
 
     }
@@ -422,20 +426,18 @@ void circle_fill_solid(GRAPH_OBJ *go) {
 }
 
 
-// add vertical pattern to a rectangle
+// add vertical bar pattern to a rectangle
 void rect_fill_vertbar(GRAPH_OBJ *go) {
 
     int i;
     int n, m;
     uint16_t tmask;
-    //float posx0, posy0, posx1, posy1;
     float posx0, posy0, posy1;
 
     tmask = STARTING_TEXTURE_MASK;
     n = (int)(go->grect.x1 - go->grect.x0);
     posx0 = go->grect.x0;
     posy0 = go->grect.y0;
-    //posx1 = go->grect.x1;
     posy1 = go->grect.y1;
 
     for (i = 0; i < n; i++) {
@@ -444,21 +446,16 @@ void rect_fill_vertbar(GRAPH_OBJ *go) {
         if (m == 0) {
             tmask = STARTING_TEXTURE_MASK;
         }
-        //printf("m = %u\n", m);
-        //printf("tmask = %u\n", tmask);
-        //printf("tmask & t = %u\n", tmask& t);
+
         if (go->gs.pattern & tmask) {
-            //al_draw_line(posx0, posy0, posx1, posy1, go->gc.fg, TEXTURE_LINE_WIDTH);
             draw_vert_line(posx0, posy0, posy1, go->gc.fg);
         }
         else {
-            //al_draw_line(posx0, posy0, posx1, posy1, go->gc.bg, TEXTURE_LINE_WIDTH);
             draw_vert_line(posx0, posy0, posy1, go->gc.bg);
         }
 
         tmask = tmask >> 1;
         posx0 = go->grect.x0 + (float)i;
- //       posx1 = go->grect.x0 + (float)i;
     }
 }
 
@@ -474,19 +471,9 @@ void rect_fill_pattern(GRAPH_OBJ *go) {
 
     posx = go->grect.x0;
     posy = go->grect.y0;
-    //posx1 = go->grect.x1;
-    //posy1 = go->grect.y1;
 
     for (r = 0; r < q; r++) {
         for (c = 0; c < n; c++) {
-
-            //m = c % NUM_OF_TEXTURE_BITS;
-            //if (m == 0) {
-            //    tmask = STARTING_TEXTURE_MASK;
-            //}
-            //printf("m = %u\n", m);
-            //printf("tmask = %u\n", tmask);
-            //printf("tmask & t = %u\n", tmask& t);
 
             tmask = texture_mask(go, posx, posy);
             if (go->gs.pattern & tmask) {
@@ -496,7 +483,6 @@ void rect_fill_pattern(GRAPH_OBJ *go) {
                 al_draw_pixel(posx, posy, go->gc.bg);
             }
 
-            //tmask = tmask >> 1;
             posx = go->grect.x0 + (float)c;
         }
         posy = go->grect.y0 + (float)r;
@@ -519,7 +505,6 @@ void rect_fill_solid(GRAPH_OBJ *go) {
         for (c = 0; c < n; c++) {
 
             al_draw_pixel(posx, posy, go->gc.fg);
-
             posx = go->grect.x0 + (float)c;
         }
         posy = go->grect.y0 + (float)r;
@@ -536,8 +521,6 @@ void line_pattern(GRAPH_OBJ *go) {
     float xs, ys, xe, ye;
     float x0, y0, x1, y1;
     uint16_t mask;
-    //int nl;
-    //float pps;
 
     x0 = go->gline.x0;
     y0 = go->gline.y0;
@@ -546,15 +529,6 @@ void line_pattern(GRAPH_OBJ *go) {
 
     // determine length of line
     l = sqrtf(powf((x1 - x0), (float)2) + powf((y1 - y0), (float)2));
-
-    // determine length of dash
-    //nl = ((int)(l / PIX_PER_DASH));
-    //if (nl % 2 == 0) {
-        // make it an odd number,
-        // so there is a solid dash at the start and end of the line
-    //    nl++;
-    //}
-    //pps = l / (float)nl;
 
     dy = y1 - y0;
     dx = x1 - x0;
@@ -590,7 +564,6 @@ void line_pattern(GRAPH_OBJ *go) {
             m = (y1 -y0) / (x1 - x0);
             dxn = (1 / sqrt(1 + (m * m)));
             dyn = m * dxn;
-            printf("dxn = %f, dyn = %f\n", dxn, dyn);
 
             if (x1 > x0) {
                 xe = xs + dxn;
@@ -729,29 +702,93 @@ void line_solid(GRAPH_OBJ *go) {
     al_draw_line(x0, y0, x1, y1, go->gc.fg, LINE_WIDTH);
 }
 
-#if 0
-// draw a rectangle, solid or dashed outline
-void rect(bool dash, float x0, float y0, float x1, float y1, ALLEGRO_COLOR fg, ALLEGRO_COLOR bg) {
+// draw a rectangle with solid lines
+void rect_border_solid(GRAPH_OBJ *go) {
+
+    assert(go != NULL);
+    float x0,y0, x1, y1;
     float w, h;
+    GRAPH_OBJ gl;
+
+    x0 = go->grect.x0;
+    y0 = go->grect.y0;
+    x1 = go->grect.x1;
+    y1 = go->grect.y1;
     w = x1 - x0;
     h = y1 - y0;
-    line(dash, x0, y0, x0 + w, y0, fg, bg);
-    line(dash, x0 + w, y0, x0 + w, y1, fg, bg);
-    line(dash, x0, y0, x0, y1, fg, bg);
-    line(dash, x0, y0 + h, x1, y1, fg, bg);
+
+    // rectangles are just four lines, so use the line functions with a local GRAPH_OBJ
+    dap_set_graph_color(&gl, go->gc.invert, go->gc.fg, go->gc.bg);
+    dap_set_graph_style_border(&gl, LINE_SOLID);
+    dap_set_line(&gl, x0, y0, x0 + w, y0);
+    dap_draw_line(&gl);
+    dap_set_line(&gl, x0 + w, y0, x0 + w, y1);
+    dap_draw_line(&gl);
+    dap_set_line(&gl, x0, y0, x0, y1);
+    dap_draw_line(&gl);
+    dap_set_line(&gl, x0, y0 + h, x1, y1);
+    dap_draw_line(&gl);
 }
 
-// draw a rectangle, filled with a solid color
-void rect_filled(float x0, float y0, float x1, float y1, bool dash, uint16_t t, ALLEGRO_COLOR fg, ALLEGRO_COLOR bg) {
-    if (t == 0xffff) {
-        al_draw_filled_rectangle(x0, y0, x1, y1, fg);
-    }
-    else {
-        texture_rect(x0, y0, x1, y1, t, fg, bg);
-        rect(dash, x0, y0, x1, y1, fg, bg);
-    }
+// draw a rectangle with dash lines
+void rect_border_dash(GRAPH_OBJ *go) {
+
+    assert(go != NULL);
+    float x0,y0, x1, y1;
+    float w, h;
+    GRAPH_OBJ gl;
+
+    x0 = go->grect.x0;
+    y0 = go->grect.y0;
+    x1 = go->grect.x1;
+    y1 = go->grect.y1;
+    w = x1 - x0;
+    h = y1 - y0;
+
+    // rectangles are just four lines, so use the line functions with a local GRAPH_OBJ
+    dap_set_graph_color(&gl, go->gc.invert, go->gc.fg, go->gc.bg);
+    dap_set_graph_style_border(&gl, LINE_DASH);
+    dap_set_line(&gl, x0, y0, x0 + w, y0);
+    dap_draw_line(&gl);
+    dap_set_line(&gl, x0 + w, y0, x0 + w, y1);
+    dap_draw_line(&gl);
+    dap_set_line(&gl, x0, y0, x0, y1);
+    dap_draw_line(&gl);
+    dap_set_line(&gl, x0, y0 + h, x1, y1);
+    dap_draw_line(&gl);
 }
-#endif
+
+// draw a rectangle with using the pattern
+void rect_border_pattern(GRAPH_OBJ *go) {
+
+    assert(go != NULL);
+    float x0,y0, x1, y1;
+    float w, h;
+    uint16_t pattern;
+    GRAPH_OBJ gl;
+
+    x0 = go->grect.x0;
+    y0 = go->grect.y0;
+    x1 = go->grect.x1;
+    y1 = go->grect.y1;
+    w = x1 - x0;
+    h = y1 - y0;
+
+
+    // rectangles are just four lines, so use the line functions with a local GRAPH_OBJ
+    dap_set_graph_color(&gl, go->gc.invert, go->gc.fg, go->gc.bg);
+    pattern = dap_get_graph_style_pattern(go);
+    dap_set_graph_style_pattern(&gl, pattern);
+    dap_set_graph_style_border(&gl, LINE_PATTERN);
+    dap_set_line(&gl, x0, y0, x0 + w, y0);
+    dap_draw_line(&gl);
+    dap_set_line(&gl, x0 + w, y0, x0 + w, y1);
+    dap_draw_line(&gl);
+    dap_set_line(&gl, x0, y0, x0, y1);
+    dap_draw_line(&gl);
+    dap_set_line(&gl, x0, y0 + h, x1, y1);
+    dap_draw_line(&gl);
+}
 
 // draw a dashed circle
 void circle_border_dash(GRAPH_OBJ *go) {
@@ -812,9 +849,6 @@ void circle_border_pattern(GRAPH_OBJ *go) {
         // solve for y top and bottom for a series of x values
         posyb = sqrtf(powf(rad,2) - powf((posx - go->gcirc.x),2)) + go->gcirc.y;
         posyt = go->gcirc.y - (posyb - go->gcirc.y);
-        //dy = posyb - posyt;
-
-        //posy = (float)r + posyt;
 
         // draw top half of circle
         tmask = texture_mask(go, posx, posyt);
@@ -834,9 +868,7 @@ void circle_border_pattern(GRAPH_OBJ *go) {
             al_draw_pixel(posx, posyb, go->gc.bg);
         }
 
-        //tmask = tmask >> 1;
         posx = posxs + (float)i;
-
     }
 }
 
@@ -848,14 +880,13 @@ void circle_border_pattern(GRAPH_OBJ *go) {
     assert(go != NULL);
     assert(filename != NULL);
 
-    int fd;
     int r;
     uint8_t *dataptr;
     struct stat sb;
 
     // open file and get stats (size)
     go->grast.fd = open(filename, O_RDONLY, S_IRUSR | S_IWUSR);
-    assert(fd != -1);
+    assert(go->grast.fd != -1);
 
     r = fstat(go->grast.fd, &sb);
     if (r == -1) {
@@ -877,6 +908,18 @@ void circle_border_pattern(GRAPH_OBJ *go) {
     }
 
     return 0;
+}
+
+// close raster file
+// returns 0 if success, otherwise -1
+ int dap_close_raster_file(GRAPH_OBJ *go) {
+
+    assert(go != NULL);
+    int r;
+
+    // open file and get stats (size)
+    r = close(go->grast.fd);
+    return r;
 }
 
 // draw raster pattern
@@ -1041,6 +1084,53 @@ void dap_draw_circle_border(GRAPH_OBJ *go) {
     }
 }
 
+// draw rectangle border
+void dap_draw_rectangle_border(GRAPH_OBJ *go) {
+
+    assert(go != NULL);
+    if (go->gtype == TYPE_RECTANGLE) {
+
+        switch(go->gs.border)
+        {
+            case BORDER_SOLID:
+            rect_border_solid(go);
+            break;
+
+            case BORDER_DASH:
+            rect_border_dash(go);
+            break;
+
+            case BORDER_PATTERN:
+            rect_border_pattern(go);
+            break;
+
+            default:
+            assert(go->gs.fill < BORDER_MAX);
+            break;
+        }
+    }
+}
+
+// draw a circle
+void dap_draw_circle(GRAPH_OBJ *go) {
+    assert(go != NULL);
+    dap_draw_circle_fill(go);
+    dap_draw_circle_border(go);
+}
+
+// draw a rectangle
+void dap_draw_rectangle(GRAPH_OBJ *go) {
+    assert(go != NULL);
+    dap_draw_rectangle_fill(go);
+    dap_draw_rectangle_border(go);
+}
+
+
+
+
+void shutdown() {
+    // quit
+}
 
 int main()  {
 
@@ -1052,8 +1142,9 @@ int main()  {
     ALLEGRO_TIMER *timer;
     ALLEGRO_EVENT event;
 
+    atexit(shutdown);
+
     al_init();
-    al_init_font_addon();
     al_init_primitives_addon();
     al_init_image_addon();
     al_install_keyboard();
@@ -1070,6 +1161,9 @@ int main()  {
     //al_register_event_source(q, al_get_display_event_source(display));
     al_register_event_source(q, al_get_timer_event_source(timer));
 
+    printf("size of GRAPH_OBJ = %ld\n", sizeof(GRAPH_OBJ));
+
+    // set defaults
     dap_set_graph_style_clip(&g, false);
     dap_set_graph_type(&g, TYPE_RECTANGLE);
     dap_set_graph_color(&g, false, C585NM, BLACK);
@@ -1080,7 +1174,7 @@ int main()  {
     al_clear_to_color(BLACK);
 
     // draw a horizontal line
-    dap_set_graph_style_border(&g, BORDER_PATTERN);
+    dap_set_graph_style_border(&g, LINE_PATTERN);
     dap_set_line(&g, 10, 10, 200, 10);
     dap_draw_line(&g);
     // draw a vertical line
@@ -1116,6 +1210,7 @@ int main()  {
     dap_set_circle(&g, 350, 300, 50);
     dap_draw_circle_fill(&g);
 
+    // draw circle borders
     dap_set_graph_style_border(&g, BORDER_DASH);
     dap_set_circle(&g, 60, 450, 50);
     dap_draw_circle_border(&g);
@@ -1128,31 +1223,47 @@ int main()  {
     dap_set_circle(&g, 350, 450, 50);
     dap_draw_circle_border(&g);
 
-    //line(false, 200, 300, 400, 300, C585NM, BLACK);
-    //line(false, 200, 300, 400, 10, C585NM, BLACK);
+    // draw a solid rectangles
+    dap_set_graph_style_border(&g, BORDER_SOLID);
+    dap_set_rectangle(&g, 410, 650, 600, 700);
+    dap_draw_rectangle_border(&g);
 
-#if 0
-    // draw a dashed rectangle
-    rect(true, 10, 400, 400, 500, C585NM, BLACK);
-    // draw a filled rectangle
-    //rect_filled(10, 550, 400, 600, 0xF0F0, C585NM, BLACK);
-    rect_filled(10, 550, 400, 600, false, 0x0101, C585NM, BLACK);
+    dap_set_graph_style_border(&g, BORDER_DASH);
+    dap_set_rectangle(&g, 10, 650, 200, 700);
+    dap_draw_rectangle_border(&g);
 
+    dap_set_graph_style_border(&g, BORDER_PATTERN);
+    dap_set_rectangle(&g, 210, 650, 400, 700);
+    dap_draw_rectangle_border(&g);
 
-    // draw dashed circle
-    circle(true, 60, 300, 50, 0xF0F0, C585NM, BLACK);
-#endif
+    // draw a rectangle
+    dap_set_graph_style(&g, BORDER_PATTERN, FILL_PATTERN, 0xFF00);
+    dap_set_rectangle(&g, 700, 400, 900, 500);
+    dap_draw_rectangle(&g);
 
-    // draw raster pattern
+    // draw a circle
+    dap_set_graph_style(&g, BORDER_PATTERN, FILL_PATTERN, 0xFF00);
+    dap_set_circle(&g, 700, 200, 150);
+    dap_draw_circle(&g);
+
+    // get raster data and map into memory
     r = dap_set_raster_file(&g, RASTER_FILE, 0, 725, 512);
     if (r == -1) {
         printf("Could not open raster file\n");
     }
 
+    // close the raster file, data is in memory
+    r =  dap_close_raster_file(&g);
+    if (r == -1) {
+        printf("Could not close raster file\n");
+    }
+
+    // draw raster pattern
     r = dap_draw_raster(&g);
     if (r == -1) {
         printf("Nothing to draw\n");
     }
+
 
     // update display
     al_flip_display();
@@ -1173,7 +1284,12 @@ int main()  {
 
     // quit
     al_destroy_timer(timer);
+    al_destroy_event_queue(q);
+    al_destroy_display(display);
     al_uninstall_keyboard();
+    al_rest(5.0);
+    al_uninstall_system();
+
 
     return 0;
 }
